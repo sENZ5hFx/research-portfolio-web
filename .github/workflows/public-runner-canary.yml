@@ -1,0 +1,45 @@
+# Public runner admission probe. It does not checkout source or use secrets.
+# Scope: one zero-cost public repo, never a private-fleet validation receipt.
+name: Public Linux runner admission canary
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-runner-canary.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: public-runner-canary-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-admission:
+    name: public Linux runner assigned and executed
+    runs-on: ubuntu-slim
+    timeout-minutes: 2
+    steps:
+      - name: Confirm a real Linux executor
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test -n "${GITHUB_RUN_ID:-}"
+          test -n "${RUNNER_NAME:-}"
+          test -n "${GITHUB_SHA:-}"
+          printf 'EXECUTED public canary job on a GitHub-managed Linux runner.\n'
+      - name: Preserve minimal non-secret run receipt
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Public runner admission probe'
+            echo 'Executor actually entered job steps.'
+            echo "Run ID: ${GITHUB_RUN_ID}"
+            echo "Attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo 'This public probe does not validate any private code.'
+          } >> "${GITHUB_STEP_SUMMARY}"
