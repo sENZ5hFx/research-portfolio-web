@@ -1,0 +1,134 @@
+name: Public exact-head project runtime checks
+# Read-only, public checkouts; no secrets, publishing, or external model calls.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/public-project-runtime-checks.yml']
+permissions: {}
+jobs:
+  project-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - name: Test declared project checks and classify research scripts
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          node --version
+          python --version
+          root="$(mktemp -d)"
+          trap 'rm -rf -- "$root"' EXIT
+          export root
+          cat > "$root/targets" <<'REPOS'
+          sENZ5hFx/copilot-cli a296954c977f915fd2cf7d81458d0473cacbf6f5
+          sENZ5hFx/structural-novelty-gaps-2026 e348f83d224fe227d6ddf5fc7985e6e3c2bbcdab
+          sENZ5hFx/knowledge-gap-frontier-2026 65e4a38af5075f990f575da491e4dd5b822a8c39
+          sENZ5hFx/autonomous-research-session-2026-08-03 69aa6b5c95e4ee04e2dd979481e15b2adc4b3173
+          sENZ5hFx/novel-scientific-gaps-2026-08-04 644d0e882535bf5464b0a8ac9e7da9b658c5d76d
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-08 45b2830b0a11d7f629db1e69c3397e1f61b58e06
+          sENZ5hFx/realm-discovery-session-20260808 3cf36324c4ef47290e8f5bda95b3eae05376fdfb
+          sENZ5hFx/realm-discovery-session-20260808-v2 eb99dac70fd561b9c54f002cb4e1bf3a59d01759
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-14 88efa4f9ab11b2f0a0dddb05ef49f09c7fd7a239
+          sENZ5hFx/genuine-scientific-gaps-aug2026 f8c0f5bc9a3d3d15ea8897bc0c168318c24819eb
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-21 76c0ea8fe6f81aa1b7e488d883487c5909af9b64
+          sENZ5hFx/transducer-absence-class-2026-08-28 0147e893476f0e718912200d49f4aaabcfb6a427
+          sENZ5hFx/cadence-mismatch-class-2026-08-29 bb8c52cf9d0e5a3324c3e8cd61de2ef16e9d53c2
+          sENZ5hFx/failed-adjudication-class-2026-08-31 b7af406f18f1ff6c7a2fc0342d187eb2b1709b21
+          sENZ5hFx/join-absence-class-2026-09-02 dd0d65592e1c7cbbccae8ee8fc1f8e413a057cc1
+          sENZ5hFx/interscale-operator-absence-2026-09-04 79397ce0557c90bdf0a18af8a506fb5858582f8e
+          sENZ5hFx/destructive-inquiry-class-2026-09-06 e46760a1f40e77e66729eb58089f112b265499f1
+          sENZ5hFx/patch-proliferation-class-2026-09-08 9cc0328028a3b517dc952f9b34c4dca52efc69a2
+          sENZ5hFx/research-portfolio-web 39e13806a2dd9924c8ff2df7182e09bc63f799bd
+          sENZ5hFx/unrecorded-cessation-class-2026-09-10 99499d06876966057129d32fd533b786fc02f42b
+          sENZ5hFx/discarded-channel-class-2026-09-12 d841e8a975aa438c7deac4864b05575945e379c7
+          sENZ5hFx/observable-aliasing-class-2026-09-14 d27fd13bb52a767a3bb52e4f866948873654bc14
+          sENZ5hFx/unclosed-redox-column-2026-09-16 3aef9ee716d1022441be05f1b9dd93fbcf70f92d
+          sENZ5hFx/coupling-incompleteness-2026-09-17 0b7194a385e700c03aaca26029745fb32206ee11
+          sENZ5hFx/truncated-privilege-class-2026-09-20 ef8ec24a38213cfd1350bf6af8e515677a1a36c4
+          sENZ5hFx/channel-monopoly-class-2026-09-20 6c9e411a59e0c9156abd6d77f079bc373f0960b0
+          sENZ5hFx/exchangeability-failure-class-2026-09-23 7d3e2627f92e4b7aed016e484281fee5e9fe5cbc
+          sENZ5hFx/independence-privilege-class-2026-09-25 410dc5e408baf847f77ad805dd2bb0779e1f9d94
+          sENZ5hFx/interval-reversal-class-2026-09-27 da228854312c380b958089b2ccefb3caa56efe83
+          sENZ5hFx/rigid-join-class-2026-09-30 1f5cd8b5228d166afe074c50554bdb5954bdb7a9
+          sENZ5hFx/substrate-export-class-2026-09-30 be15bd92e64a50b84c821bd424245f7c364cec70
+          sENZ5hFx/axis-null-class-2026-10-02 1132fe391568870067ef374965e3eacee87c9829
+          sENZ5hFx/precision-divergence-class-2026-10-04 ad0205a519427ac79cd636e0bed44351cccc8e98
+          sENZ5hFx/fill-privilege-class-2026-10-04 ee2e6ca6cf536fc44b8990887fa6fd684bbb9564
+          sENZ5hFx/lattice-pdc-landing-2026-10-05 76bd75824493a9d2e0110e17700ae091fa3e1e50
+          sENZ5hFx/denominator-privilege-class-2026-10-07 4e33a3ab5d9ac57e5139c1f40fb7a10ce9ddd916
+          sENZ5hFx/column-node-veto-2026-10-09 c32230436ec0264bf4fe1052a6bbbdfaf9670f79
+          sENZ5hFx/remainder-growth-class-2026-10-09 63a22f43ed344cb93891d27df3cac0f85108ee66
+          sENZ5hFx/false-saturation-class-2026-10-12 e4c298149f8074a2993d9f303665192f32947249
+          sENZ5hFx/kind-substitution-refused-2026-10-13 cb49a6cf67f74042e7dc45a7cbe62daac4044f74
+          sENZ5hFx/kind-substitution-class-2026-10-13 243ef085a8ae9155fcb09d377cff28589347b6c5
+          sENZ5hFx/kind-overshoot-refused-2026-10-15 0afe18ed64da0d6514ecc6c68130883a47126e2f
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-18 9496a04de5f8c6a68b25ec328cddddc35fd4d25b
+          sENZ5hFx/walker-pdf-bytes-missing-2026-10-18 60d6176291d130bce04d96ff5acbb27f7cdc0fdb
+          sENZ5hFx/kind-overshoot-code-is-not-table-2026-10-19 fa9729e886dd198c58b55083027736189d3e4549
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-19 cc1421ae36d5a2c2a59abcb8b8cf2ea07e0b1198
+          sENZ5hFx/leaderboard-killed-2026-10-20 e942a5435cee86d013c7f4fab2cdf788b437d5ba
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-25 04e58c2fb35f983119eacf0e6a896f370a8a5c0d
+          sENZ5hFx/whole-question-demo 014df948ebadf189d273c9766aabd238018b634f
+          sENZ5hFx/chrome-devtools-mcp 465abd42811837aae8840796104b69e752e77b21
+          Define-Web-Design/plemerad1991.github.io 575f318a9e4e403015b892349bbed18a50857d88
+          The-New-Witness/the-new-witness 0906ae46f61dc4675c5c7457f9a2005dd92d3e6e
+          REPOS
+          cat > "$root/one.sh" <<'SCRIPT'
+          set -euo pipefail
+          repo="$1"; expected="$2"; idx="$3"
+          cd "$root"
+          git -c core.autocrlf=false -c core.hooksPath=/dev/null clone -q --depth 1 --single-branch --no-tags --no-recurse-submodules --branch infra/copilot-config-20261125 "https://github.com/$repo.git" "$idx"
+          cd "$idx"
+          test "$(git rev-parse HEAD)" = "$expected"
+          # Parse every tracked Python file without executing imports or code.
+          python -c 'import subprocess,pathlib; p=[x for x in subprocess.check_output(["git","ls-files","-z"]).decode().split("\0") if x.endswith(".py")]; [compile(pathlib.Path(x).read_bytes(),x,"exec") for x in p]; print("PYTHON_SYNTAX_FILES",len(p))'
+          case "$repo" in
+            sENZ5hFx/copilot-cli)
+              bash -n install.sh test/install_test.sh
+              if [ "$(uname -s)" = Linux ]; then bash test/install_test.sh; else echo "Installer suite declared Linux only; non-Linux syntax only"; fi ;;
+            sENZ5hFx/whole-question-demo) python site/verify.py ;;
+            Define-Web-Design/plemerad1991.github.io) python -m unittest discover -s tests -p test_static_site_integrity.py -v; python scripts/check_static_html.py . ;;
+            The-New-Witness/the-new-witness) python -m unittest discover -s tests -v; python scripts/validate_archive.py ;;
+            sENZ5hFx/remainder-growth-class-2026-10-09) python -m unittest -v test_rgc_evidence ;;
+            sENZ5hFx/false-saturation-class-2026-10-12) python fsc_score.py ;;
+            sENZ5hFx/kind-substitution-refused-2026-10-13) python kind_gate.py ;;
+            sENZ5hFx/kind-substitution-class-2026-10-13) python ksc_score.py ;;
+            sENZ5hFx/kind-overshoot-refused-2026-10-15) python ko_screen.py ;;
+            sENZ5hFx/kind-overshoot-still-refused-2026-10-19) python oa_pointer_audit.py ;;
+            sENZ5hFx/fill-privilege-class-2026-10-04) python fpc_score.py ;;
+            sENZ5hFx/knowledge-gap-frontier-2026) python oxygen_kind_gate_2026-11-06.py ;;
+            sENZ5hFx/chrome-devtools-mcp) echo "Separate native project test matrix required"; printf 'PROJECT_DEFERRED %s %s\n' "$repo" "$expected"; exit 0 ;;
+            *)
+              if git ls-files | grep -Eq '\.(py|js|cjs|mjs|ts|sh|ps1|rb|go|rs|swift|ipynb|html|htm)$'; then
+                printf 'SOURCE_ONLY %s %s (syntax checks only, no reviewed runnable test selected)\n' "$repo" "$expected"
+              else
+                printf 'NO_APP_SOURCE_FOUND %s %s (no executable application source detected by this inventory)\n' "$repo" "$expected"
+              fi
+              exit 0 ;;
+          esac
+          printf 'PROJECT_CHECK_PASS %s %s\n' "$repo" "$expected"
+          SCRIPT
+          i=0; failed=0
+          while read -r repo expected; do
+            i=$((i+1))
+            if bash "$root/one.sh" "$repo" "$expected" "$i"; then :; else
+              printf 'PROJECT_CHECK_FAIL %s %s\n' "$repo" "$expected"
+              failed=$((failed+1))
+            fi
+          done < "$root/targets"
+          printf 'PROJECT_SCAN attempted=%s failed=%s\n' "$i" "$failed"
+          test "$i" -eq 52
+          test "$failed" -eq 0
