@@ -1,0 +1,146 @@
+name: Public repository Copilot configuration preflight
+# Existing public repositories only. Read-only remote operations; no private
+# source, no repository secrets, no model calls, no project dependency execution.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/public-copilot-preflight.yml']
+permissions: {}
+jobs:
+  preflight:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Test isolated candidate in each actual public checkout
+        shell: bash
+        env:
+          CI: 'true'
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf -- "$root"' EXIT
+          mkdir -p "$root/tools" "$root/checkouts"
+          cd "$root/tools"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @github/copilot@1.0.115
+          bin="$root/tools/node_modules/.bin/copilot"
+          "$bin" --version
+          export bin root
+          cat > "$root/repos.txt" <<'REPOS'
+          sENZ5hFx/copilot-cli main
+          sENZ5hFx/structural-novelty-gaps-2026 main
+          sENZ5hFx/knowledge-gap-frontier-2026 main
+          sENZ5hFx/autonomous-research-session-2026-08-03 main
+          sENZ5hFx/novel-scientific-gaps-2026-08-04 main
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-08 main
+          sENZ5hFx/realm-discovery-session-20260808 main
+          sENZ5hFx/realm-discovery-session-20260808-v2 main
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-14 main
+          sENZ5hFx/genuine-scientific-gaps-aug2026 main
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-21 main
+          sENZ5hFx/transducer-absence-class-2026-08-28 main
+          sENZ5hFx/cadence-mismatch-class-2026-08-29 main
+          sENZ5hFx/failed-adjudication-class-2026-08-31 main
+          sENZ5hFx/join-absence-class-2026-09-02 main
+          sENZ5hFx/interscale-operator-absence-2026-09-04 main
+          sENZ5hFx/destructive-inquiry-class-2026-09-06 main
+          sENZ5hFx/patch-proliferation-class-2026-09-08 main
+          sENZ5hFx/research-portfolio-web main
+          sENZ5hFx/unrecorded-cessation-class-2026-09-10 main
+          sENZ5hFx/discarded-channel-class-2026-09-12 main
+          sENZ5hFx/observable-aliasing-class-2026-09-14 main
+          sENZ5hFx/unclosed-redox-column-2026-09-16 main
+          sENZ5hFx/coupling-incompleteness-2026-09-17 main
+          sENZ5hFx/truncated-privilege-class-2026-09-20 main
+          sENZ5hFx/channel-monopoly-class-2026-09-20 main
+          sENZ5hFx/exchangeability-failure-class-2026-09-23 main
+          sENZ5hFx/independence-privilege-class-2026-09-25 main
+          sENZ5hFx/interval-reversal-class-2026-09-27 main
+          sENZ5hFx/rigid-join-class-2026-09-30 main
+          sENZ5hFx/substrate-export-class-2026-09-30 main
+          sENZ5hFx/axis-null-class-2026-10-02 main
+          sENZ5hFx/precision-divergence-class-2026-10-04 main
+          sENZ5hFx/fill-privilege-class-2026-10-04 main
+          sENZ5hFx/lattice-pdc-landing-2026-10-05 main
+          sENZ5hFx/denominator-privilege-class-2026-10-07 main
+          sENZ5hFx/column-node-veto-2026-10-09 main
+          sENZ5hFx/remainder-growth-class-2026-10-09 main
+          sENZ5hFx/false-saturation-class-2026-10-12 main
+          sENZ5hFx/kind-substitution-refused-2026-10-13 main
+          sENZ5hFx/kind-substitution-class-2026-10-13 main
+          sENZ5hFx/kind-overshoot-refused-2026-10-15 main
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-18 main
+          sENZ5hFx/walker-pdf-bytes-missing-2026-10-18 main
+          sENZ5hFx/kind-overshoot-code-is-not-table-2026-10-19 main
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-19 main
+          sENZ5hFx/leaderboard-killed-2026-10-20 main
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-25 main
+          sENZ5hFx/whole-question-demo main
+          sENZ5hFx/chrome-devtools-mcp main
+          Define-Web-Design/plemerad1991.github.io master
+          The-New-Witness/the-new-witness main
+          REPOS
+          cat > "$root/test-one.sh" <<'SCRIPT'
+          set -euo pipefail
+          repo="$1"
+          branch="$2"
+          i="$3"
+          cd "$root/checkouts"
+          git -c core.hooksPath=/dev/null clone -q --depth 1 --single-branch --no-tags --no-recurse-submodules --branch "$branch" "https://github.com/$repo.git" "$i"
+          cd "$i"
+          head="$(git rev-parse HEAD)"
+          # Never follow a configuration directory symlink or overwrite any existing file.
+          node -e 'const fs=require("fs"); for(const p of [".github",".github/agents",".github/skills",".github/skills/evidence-gated-delivery"]){try{const s=fs.lstatSync(p);if(!s.isDirectory()||s.isSymbolicLink())throw Error("unsafe directory "+p)}catch(e){if(e.code!=="ENOENT")throw e}} for(const p of [".github/copilot-instructions.md",".github/agents/portfolio-verifier.agent.md",".github/skills/evidence-gated-delivery/SKILL.md"]){try{fs.lstatSync(p);throw Error("existing configuration "+p)}catch(e){if(e.code!=="ENOENT")throw e}}'
+          mkdir -p .github/agents .github/skills/evidence-gated-delivery
+          cat > .github/copilot-instructions.md <<'INSTRUCTIONS'
+          # Repository agent instructions
+          Respect existing repository instructions, permissions, and security policies. Inspect actual manifests, lockfiles and workflows. Never expose secrets, disable required checks, or incur unauthorized costs. Verify changes with real tests; distinguish static inspection from runtime evidence. Preserve existing project behavior.
+          INSTRUCTIONS
+          cat > .github/agents/portfolio-verifier.agent.md <<'AGENT'
+          ---
+          name: portfolio-verifier
+          description: Read-only evidence and compatibility review.
+          tools: ["read", "grep", "glob"]
+          strict-tools-list: true
+          include-custom-instructions: true
+          ---
+          Inspect source and verification evidence without modifying files, executing commands or deploying. Report defects, paths, missing evidence, and reproducible checks. Do not claim unexecuted tests passed.
+          AGENT
+          cat > .github/skills/evidence-gated-delivery/SKILL.md <<'SKILL'
+          ---
+          name: evidence-gated-delivery
+          description: Use when implementing, testing, reviewing or preparing changes with reproducible evidence.
+          ---
+          Inspect project instructions, manifests, lockfiles and CI. Make isolated changes. Run applicable checks in an authorized environment and record commands, runtime versions, exit codes and evidence. Keep failures and missing evidence visible. Merge or deploy only after required independent review and verification.
+          SKILL
+          export COPILOT_HOME="$root/home-$i"
+          mkdir -p "$COPILOT_HOME"
+          "$bin" skill list --json > "$root/skills-$i.json"
+          "$bin" instruction list --json > "$root/instructions-$i.json"
+          node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const c=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));if(!Array.isArray(s)||!s.some(x=>x.name==="evidence-gated-delivery"&&x.enabled!==false))throw Error("candidate skill missing");if(!Array.isArray(c)||!c.some(x=>JSON.stringify(x).includes("copilot-instructions.md")))throw Error("candidate instructions missing")' "$root/skills-$i.json" "$root/instructions-$i.json"
+          printf 'PREFLIGHT_PASS %s %s\n' "$repo" "$head"
+          SCRIPT
+          i=0
+          failed=0
+          while read -r repo branch; do
+            i=$((i+1))
+            if bash "$root/test-one.sh" "$repo" "$branch" "$i"; then
+              :
+            else
+              printf 'PREFLIGHT_FAIL %s\n' "$repo"
+              failed=$((failed+1))
+            fi
+          done < "$root/repos.txt"
+          printf 'EMPTY_REPO sENZ5hFx/aam-not-vor-2026-10-21 (no default commit; not tested)\n'
+          printf 'PUBLIC_CHECKOUTS attempted=%s failed=%s\n' "$i" "$failed"
+          test "$i" -eq 52
+          test "$failed" -eq 0
+          printf 'Unauthenticated instruction and skill discovery only; no live agent invocation or project build/runtime checks.\n'
