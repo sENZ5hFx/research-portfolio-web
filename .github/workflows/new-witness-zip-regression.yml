@@ -1,0 +1,47 @@
+name: New Witness raw ZIP regression and Copilot postflight
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/new-witness-zip-regression.yml']
+permissions: {}
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Verify exact repaired checkout and unchanged configuration
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf -- "$root"' EXIT
+          git -c core.autocrlf=false -c core.hooksPath=/dev/null clone -q --depth 2 --branch infra/copilot-config-20261125 --no-recurse-submodules https://github.com/The-New-Witness/the-new-witness.git "$root/project"
+          cd "$root/project"
+          test "$(git rev-parse HEAD)" = '00ea3ac2d0067a545aa0cc9743fb336dada3296d'
+          test "$(git rev-parse HEAD^)" = '0906ae46f61dc4675c5c7457f9a2005dd92d3e6e'
+          git diff --exit-code HEAD^ HEAD -- .github/
+          python -c 'import platform,sys;print(sys.version,platform.machine())'
+          python -m unittest discover -s tests -v
+          python scripts/validate_archive.py
+          mkdir -p "$root/tools" "$root/copilot-home"
+          export COPILOT_HOME="$root/copilot-home"
+          (cd "$root/tools" && npm init -y >/dev/null && npm install --no-audit --no-fund --save-exact @github/copilot@1.0.115)
+          bin="$root/tools/node_modules/.bin/copilot"
+          "$bin" --version
+          "$bin" skill list --json > "$root/skills.json"
+          "$bin" instruction list --json > "$root/instructions.json"
+          node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const c=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));if(!Array.isArray(s)||!s.some(x=>x.name==="evidence-gated-delivery"&&x.enabled!==false))throw Error("candidate skill missing");if(!Array.isArray(c)||!c.some(x=>JSON.stringify(x).includes("copilot-instructions.md")))throw Error("candidate instructions missing")' "$root/skills.json" "$root/instructions.json"
+          printf 'NEW_WITNESS_REPAIRED_PASS %s\n' '00ea3ac2d0067a545aa0cc9743fb336dada3296d'
