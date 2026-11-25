@@ -1,0 +1,47 @@
+name: Copilot CLI cross-platform synthetic canary
+# Public, isolated fixture only. No private source, no repository checkout,
+# no credentials, no model calls, no deployment and no paid runner.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/copilot-cross-platform-canary.yml']
+permissions: {}
+jobs:
+  discovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install pinned CLI and inspect synthetic project discovery
+        shell: bash
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          node -p 'process.platform + " " + process.arch'
+          mkdir -p canary-fixture
+          cd canary-fixture
+          git init -q
+          export COPILOT_HOME="$(pwd)/isolated-copilot-home"
+          mkdir -p "$COPILOT_HOME" .github/agents .github/skills/canary-evidence
+          printf '# Synthetic fixture\n' > .github/copilot-instructions.md
+          printf '%s\n' '---' 'name: canary-reviewer' 'description: Read-only synthetic canary' 'tools: ["read", "grep", "glob"]' 'strict-tools-list: true' 'include-custom-instructions: true' '---' 'Read synthetic files only.' > .github/agents/canary-reviewer.agent.md
+          printf '%s\n' '---' 'name: canary-evidence' 'description: Check synthetic discovery' '---' 'Inspect the synthetic fixture only.' > .github/skills/canary-evidence/SKILL.md
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @github/copilot@1.0.115
+          npx --no-install copilot --version
+          npx --no-install copilot --help
+          npx --no-install copilot skill list --json > skills.json
+          node -e 'const x=JSON.parse(require("fs").readFileSync("skills.json","utf8")); if(!Array.isArray(x)||!x.some(s=>s.name==="canary-evidence"&&s.enabled!==false)) throw Error("synthetic skill not discovered")'
+          npx --no-install copilot instruction list --json > instructions.json
+          node -e 'const x=JSON.parse(require("fs").readFileSync("instructions.json","utf8")); if(!Array.isArray(x)||!x.some(s=>JSON.stringify(s).includes("copilot-instructions.md"))) throw Error("synthetic instructions not discovered")'
+          printf 'Synthetic CLI discovery PASS; authentication and live agent invocation NOT TESTED.\n'
