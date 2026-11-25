@@ -1,0 +1,149 @@
+name: Public repository Copilot configuration postflight
+# Only public repositories; no secrets, private source, model calls or deployment.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/public-copilot-postflight.yml']
+permissions: {}
+jobs:
+  postflight:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Verify committed candidate and rediscover configuration
+        shell: bash
+        env:
+          CI: 'true'
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf -- "$root"' EXIT
+          mkdir -p "$root/tools" "$root/checkouts" "$root/expected"
+          cd "$root/tools"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @github/copilot@1.0.115
+          bin="$root/tools/node_modules/.bin/copilot"
+          "$bin" --version
+          export bin root
+          cat > "$root/expected/copilot-instructions.md" <<'INSTRUCTIONS'
+          # Repository agent instructions
+          Respect existing repository instructions, permissions, and security policies. Inspect actual manifests, lockfiles and workflows. Never expose secrets, disable required checks, or incur unauthorized costs. Verify changes with real tests; distinguish static inspection from runtime evidence. Preserve existing project behavior.
+          INSTRUCTIONS
+          cat > "$root/expected/portfolio-verifier.agent.md" <<'AGENT'
+          ---
+          name: portfolio-verifier
+          description: Read-only evidence and compatibility review.
+          tools: ["read", "grep", "glob"]
+          strict-tools-list: true
+          include-custom-instructions: true
+          ---
+          Inspect source and verification evidence without modifying files, executing commands or deploying. Report defects, paths, missing evidence, and reproducible checks. Do not claim unexecuted tests passed.
+          AGENT
+          cat > "$root/expected/SKILL.md" <<'SKILL'
+          ---
+          name: evidence-gated-delivery
+          description: Use when implementing, testing, reviewing or preparing changes with reproducible evidence.
+          ---
+          Inspect project instructions, manifests, lockfiles and CI. Make isolated changes. Run applicable checks in an authorized environment and record commands, runtime versions, exit codes and evidence. Keep failures and missing evidence visible. Merge or deploy only after required independent review and verification.
+          SKILL
+          cat > "$root/repos.txt" <<'REPOS'
+          sENZ5hFx/copilot-cli 33a7dc3e7c0e492e38c9a64aaeaaf6fd727de77b
+          sENZ5hFx/structural-novelty-gaps-2026 bd4cbd48e99547e5a066c97a36f39f678ab93c56
+          sENZ5hFx/knowledge-gap-frontier-2026 851522b06f76b92a4734c0597929b1a9648e076e
+          sENZ5hFx/autonomous-research-session-2026-08-03 ce58a57b1b6e006fe8d743e7318ffedb85b82dba
+          sENZ5hFx/novel-scientific-gaps-2026-08-04 cedcb6acbafff4d48f22fa27bc18e29126632f0e
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-08 1e5473b21c0540be860e8fafdd61dac04ee2ccf4
+          sENZ5hFx/realm-discovery-session-20260808 448f09edd37aba2c456b90ebf1997869d5fe35df
+          sENZ5hFx/realm-discovery-session-20260808-v2 778ef908f86eb56242568c8a7dcdfea230f7d0a4
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-14 f1f7becb403f186ef9142ef153cc4e83b379b5b7
+          sENZ5hFx/genuine-scientific-gaps-aug2026 cbfacf17ff2c7be32287fbb7e5b118f35153c236
+          sENZ5hFx/realm-taxonomy-discoveries-2026-08-21 68092c795bec9cdd422e7aaa6ef63c4ab622da7e
+          sENZ5hFx/transducer-absence-class-2026-08-28 ceae013ef0c19bc3ea0368542d360fe2b870a79a
+          sENZ5hFx/cadence-mismatch-class-2026-08-29 99943c61a637078d706c6735af1eb901d32185cb
+          sENZ5hFx/failed-adjudication-class-2026-08-31 79ddfcb9f8d14b3f81283309f8efef9a70e7345a
+          sENZ5hFx/join-absence-class-2026-09-02 0973f82cdf04ae771835fdb68f19cb858636c98e
+          sENZ5hFx/interscale-operator-absence-2026-09-04 d7c37c3a682d9f8ea767476b09f7740c87c14e4c
+          sENZ5hFx/destructive-inquiry-class-2026-09-06 6354a9a0c34c46c6143da2b6f549a160247d030a
+          sENZ5hFx/patch-proliferation-class-2026-09-08 eb0e778c860335856eaad68cba3ea1e71d73e742
+          sENZ5hFx/research-portfolio-web ea27e021d91ca225c276e722a480b20a93c47bea
+          sENZ5hFx/unrecorded-cessation-class-2026-09-10 99d90a8e6ca1edc9c1c2fb6539467a3066f00ebd
+          sENZ5hFx/discarded-channel-class-2026-09-12 e0a226b0358dd3816ddf55cfbfdfe192d148a714
+          sENZ5hFx/observable-aliasing-class-2026-09-14 f3561d4584933c096c1219ac261c415251a646ed
+          sENZ5hFx/unclosed-redox-column-2026-09-16 5679f7e24c336fb4ee3cd7b9b1bb61b377e03c46
+          sENZ5hFx/coupling-incompleteness-2026-09-17 e08a5d5e8f3d8e16bc9b2c5278332c1b78ba140c
+          sENZ5hFx/truncated-privilege-class-2026-09-20 8bfec7db6bf1b39c676da1a19687e00aba6fd98e
+          sENZ5hFx/channel-monopoly-class-2026-09-20 92526631cba2a1ea81085eb653871d73baaa5409
+          sENZ5hFx/exchangeability-failure-class-2026-09-23 049888e429da224c3824262568e7096316430d9b
+          sENZ5hFx/independence-privilege-class-2026-09-25 853aa9401c296177195ee305e0ee2709a3642f9d
+          sENZ5hFx/interval-reversal-class-2026-09-27 80f29b56c3ca2e478b9054b3d3bfdec1e285a0aa
+          sENZ5hFx/rigid-join-class-2026-09-30 093913b009f39a5bc42af3770a1a5d64cac5ce2f
+          sENZ5hFx/substrate-export-class-2026-09-30 d4058f577c7cca9e5e2a3747113586eab681d047
+          sENZ5hFx/axis-null-class-2026-10-02 1cf7a25832b6d522de9db7c0fd357791522841a5
+          sENZ5hFx/precision-divergence-class-2026-10-04 518cc20e896426844975c25cb555af97a37d1cab
+          sENZ5hFx/fill-privilege-class-2026-10-04 938fa246c9623664b81fe750dde5e34a9cf98001
+          sENZ5hFx/lattice-pdc-landing-2026-10-05 21fda1e9be4713384dad5f16d4bac449732928f8
+          sENZ5hFx/denominator-privilege-class-2026-10-07 f0aeccc5ce33a452868ec6e3e85b254ab6ca3646
+          sENZ5hFx/column-node-veto-2026-10-09 186ec178eb8d1180292bbad73c12ef2d689edae8
+          sENZ5hFx/remainder-growth-class-2026-10-09 30cd9b4f9b4af0771f2d3057b1403b2b6065bab4
+          sENZ5hFx/false-saturation-class-2026-10-12 9463d3cc65696caf3d0a65ea79e87c5d78b21353
+          sENZ5hFx/kind-substitution-refused-2026-10-13 c8124532873c51dd372c2ed52f1f9799dea903b6
+          sENZ5hFx/kind-substitution-class-2026-10-13 64373862687bc6ac5613c6c835392bf39397234c
+          sENZ5hFx/kind-overshoot-refused-2026-10-15 cea02d6c140e6611f43d1b9b3568a275dcefe118
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-18 22ef6d9cb1fdbb40d18961712c531d47c1bb8a02
+          sENZ5hFx/walker-pdf-bytes-missing-2026-10-18 10ecaddc4afe0b2dc85822a26020e71d4ce55f11
+          sENZ5hFx/kind-overshoot-code-is-not-table-2026-10-19 d41621eddead233101f3d128a6417ce53be650d1
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-19 da05c163eac2e0aaf92f6a005a93d91c229751ab
+          sENZ5hFx/leaderboard-killed-2026-10-20 166443526ea7efabe929dacc43236faa13d0babe
+          sENZ5hFx/kind-overshoot-still-refused-2026-10-25 5ea3f47ec5559ac8422266e2d53e9436e5d80b72
+          sENZ5hFx/whole-question-demo 7f67dc85a63fc2b2d9e4f82922aacd521c2ff3ca
+          sENZ5hFx/chrome-devtools-mcp 34db3776b72add7242bcfbea66441d4b37d92e87
+          Define-Web-Design/plemerad1991.github.io a2c7d6073c4deeaed4d9edb93479464713281dde
+          The-New-Witness/the-new-witness a46fb57081743cd00bf9f450d3b88d90bfe63fe6
+          REPOS
+          cat > "$root/test-one.sh" <<'SCRIPT'
+          set -euo pipefail
+          repo="$1"
+          tested_base="$2"
+          i="$3"
+          cd "$root/checkouts"
+          git -c core.autocrlf=false -c core.hooksPath=/dev/null clone -q --depth 2 --single-branch --no-tags --no-recurse-submodules --branch infra/copilot-config-20261125 "https://github.com/$repo.git" "$i"
+          cd "$i"
+          head="$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD^)" = "$tested_base"
+          test "$(git diff-tree --no-commit-id --name-status -r HEAD | wc -l | tr -d ' ')" = 3
+          for p in .github/copilot-instructions.md .github/agents/portfolio-verifier.agent.md .github/skills/evidence-gated-delivery/SKILL.md; do
+            test -f "$p"
+            test ! -L "$p"
+            test "$(git diff-tree --no-commit-id --name-status -r HEAD -- "$p" | cut -f1)" = A
+            test "$(git rev-parse "HEAD:$p")" = "$(git hash-object --no-filters "$root/expected/$(basename "$p")")"
+          done
+          export COPILOT_HOME="$root/home-$i"
+          mkdir -p "$COPILOT_HOME"
+          "$bin" skill list --json > "$root/skills-$i.json"
+          "$bin" instruction list --json > "$root/instructions-$i.json"
+          node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const c=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));if(!Array.isArray(s)||!s.some(x=>x.name==="evidence-gated-delivery"&&x.enabled!==false))throw Error("candidate skill missing");if(!Array.isArray(c)||!c.some(x=>JSON.stringify(x).includes("copilot-instructions.md")))throw Error("candidate instructions missing")' "$root/skills-$i.json" "$root/instructions-$i.json"
+          printf 'POSTFLIGHT_PASS %s %s %s\n' "$repo" "$tested_base" "$head"
+          SCRIPT
+          i=0
+          failed=0
+          while read -r repo base; do
+            i=$((i+1))
+            if bash "$root/test-one.sh" "$repo" "$base" "$i"; then
+              :
+            else
+              printf 'POSTFLIGHT_FAIL %s\n' "$repo"
+              failed=$((failed+1))
+            fi
+          done < "$root/repos.txt"
+          printf 'PUBLIC_POSTFLIGHT attempted=%s failed=%s\n' "$i" "$failed"
+          test "$i" -eq 52
+          test "$failed" -eq 0
+          printf 'Exact added configuration blobs and unauthenticated instruction/skill discovery only. No authenticated agent invocation or application-runtime certification.\n'
