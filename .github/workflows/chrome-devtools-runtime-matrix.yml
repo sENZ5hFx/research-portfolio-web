@@ -1,0 +1,55 @@
+name: Chrome DevTools MCP exact-head runtime matrix
+# Public source, no repository secrets, no publish or deploy steps.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/chrome-devtools-runtime-matrix.yml']
+permissions: {}
+jobs:
+  native-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+        node: [22, 24, 26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0, repo's declared CI action
+        with:
+          node-version: '22'
+      - name: Checkout exact candidate and prepare declared build dependencies
+        shell: bash
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          git -c core.autocrlf=false -c core.hooksPath=/dev/null clone --depth 1 --branch infra/copilot-config-20261125 --no-recurse-submodules https://github.com/sENZ5hFx/chrome-devtools-mcp.git project
+          cd project
+          test "$(git rev-parse HEAD)" = '465abd42811837aae8840796104b69e752e77b21'
+          npm run sync
+      - name: Install browser and build
+        shell: bash
+        working-directory: project
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'
+        run: |
+          set -euo pipefail
+          npx puppeteer browsers install chrome
+          npm run build
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Execute declared test suite without credentials
+        shell: bash
+        working-directory: project
+        env:
+          CI: 'true'
+          CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS: 'true'
+          CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS: 'true'
+        run: |
+          set -euo pipefail
+          node --version
+          npm run test:no-build
+          printf 'NATIVE_TEST_PASS %s\n' '465abd42811837aae8840796104b69e752e77b21'
