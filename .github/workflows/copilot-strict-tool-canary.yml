@@ -1,0 +1,165 @@
+name: Copilot strict offline tool allowlist canary
+# Synthetic local provider. No actual model, private data, credentials or publishing.
+on:
+  push:
+    branches: [ci/copilot-cross-platform-canary-20261125]
+    paths: ['.github/workflows/copilot-strict-tool-canary.yml']
+permissions: {}
+jobs:
+  canary:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Exercise actual custom-agent runtime using local synthetic provider
+        shell: bash
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf -- "$root"' EXIT
+          mkdir -p "$root/tools" "$root/project" "$root/copilot-home"
+          export COPILOT_HOME="$root/copilot-home"
+          cd "$root/tools"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact @github/copilot@1.0.115
+          bin="$root/tools/node_modules/.bin/copilot"
+          "$bin" --version
+          cd "$root/project"
+          git init -q
+          mkdir -p .github/agents .github/skills/evidence-gated-delivery
+          cat > .github/copilot-instructions.md <<'INSTRUCTIONS'
+          # Repository agent instructions
+          Respect existing repository instructions, permissions, and security policies. Inspect actual manifests, lockfiles and workflows. Never expose secrets, disable required checks, or incur unauthorized costs. Verify changes with real tests; distinguish static inspection from runtime evidence. Preserve existing project behavior.
+          INSTRUCTIONS
+          cat > .github/agents/portfolio-verifier.agent.md <<'AGENT'
+          ---
+          name: portfolio-verifier
+          description: Read-only evidence and compatibility review.
+          tools: ["read", "grep", "glob"]
+          strict-tools-list: true
+          include-custom-instructions: true
+          ---
+          Inspect source and verification evidence without modifying files, executing commands or deploying. Report defects, paths, missing evidence, and reproducible checks. Do not claim unexecuted tests passed.
+          AGENT
+          cat > .github/skills/evidence-gated-delivery/SKILL.md <<'SKILL'
+          ---
+          name: evidence-gated-delivery
+          description: Use when implementing, testing, reviewing or preparing changes with reproducible evidence.
+          ---
+          Inspect project instructions, manifests, lockfiles and CI. Make isolated changes. Run applicable checks in an authorized environment and record commands, runtime versions, exit codes and evidence. Keep failures and missing evidence visible. Merge or deploy only after required independent review and verification.
+          SKILL
+          cat > "$root/mock.cjs" <<'MOCK'
+          const http = require('node:http');
+          const fs = require('node:fs');
+          const {spawn} = require('node:child_process');
+          const assert = require('node:assert/strict');
+          const path = require('node:path');
+          const bin = process.argv[2];
+          const fixture = process.cwd();
+          const model = 'mock-tool-canary';
+          const readMarker = 'SYNTHETIC_READ_RECEIPT_91d4';
+          const promptMarker = 'MOCK_AGENT_CANARY_7fa2';
+          const sentinel = path.join(fixture, 'sentinel.txt');
+          const source = path.join(fixture, 'sample.txt');
+          fs.writeFileSync(source, readMarker + '\n');
+          fs.writeFileSync(sentinel, 'unchanged\n');
+          const calls = [];
+          let phase = 0;
+          let advertised = [];
+          let readObserved = false;
+          let deniedObserved = false;
+          let shellDeniedObserved = false;
+          let selectedObserved = false;
+          let protocolError;
+          function reply(res, body, text, call) {
+            const id='mock-'+phase;
+            const delta=call?{role:'assistant',content:null,tool_calls:[{index:0,id:'mock-call-'+phase,type:'function',function:{name:call.name,arguments:JSON.stringify(call.args)}}]}:{role:'assistant',content:text};
+            const finish=call?'tool_calls':'stop';
+            if(body.stream) {
+              res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
+              for(const c of [{id,object:'chat.completion.chunk',created:1,model,choices:[{index:0,delta,finish_reason:null}]},{id,object:'chat.completion.chunk',created:1,model,choices:[{index:0,delta:{},finish_reason:finish}]},{id,object:'chat.completion.chunk',created:1,model,choices:[],usage:{prompt_tokens:100,completion_tokens:10,total_tokens:110}}])res.write('data: '+JSON.stringify(c)+'\n\n');
+              return res.end('data: [DONE]\n\n');
+            }
+            res.writeHead(200,{'Content-Type':'application/json'});
+            res.end(JSON.stringify({id,object:'chat.completion',created:1,model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:delta.tool_calls.map(({index,...x})=>x)}:delta,finish_reason:finish}],usage:{prompt_tokens:100,completion_tokens:10,total_tokens:110}}));
+          }
+          const server=http.createServer((req,res)=>{
+            if(req.method==='GET'&&req.url.endsWith('/models')){
+              res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({object:'list',data:[{id:model,object:'model',created:1,owned_by:'local-fixture'}]}));
+            }
+            if(req.method!=='POST'||!req.url.includes('chat/completions')){
+              res.writeHead(404);return res.end('{}');
+            }
+            let raw='';
+            req.on('data',c=>{raw+=c;if(raw.length>4_000_000)req.destroy()});
+            req.on('end',()=>{
+              try {
+                const body=JSON.parse(raw);
+                const serialized=JSON.stringify(body.messages??[]);
+                const tools=(body.tools??[]).map(t=>t.function??t);
+                const names=tools.map(t=>t.name).filter(Boolean).sort();
+                calls.push({phase,names});
+                if(!serialized.includes(promptMarker)&&phase===0)return reply(res,body,'Synthetic auxiliary request.');
+                if(phase===0){
+                  advertised=names;
+                  selectedObserved=serialized.includes('Inspect source and verification evidence without modifying files')||serialized.includes('Read-only evidence and compatibility review.');
+                  const view=tools.find(t=>t.name==='view'||t.name==='read'||t.name==='read_file');
+                  if(!view){protocolError='read tool unavailable: '+names.join(',');return reply(res,body,'Missing read tool.')}
+                  const properties=view.parameters?.properties??{};
+                  const key=['path','file_path','filePath','filename'].find(k=>k in properties);
+                  if(!key){protocolError='read schema path unavailable: '+Object.keys(properties).join(',');return reply(res,body,'Unsupported read schema.')}
+                  phase=1;return reply(res,body,null,{name:view.name,args:{[key]:source}});
+                }
+                if(phase===1){
+                  readObserved=serialized.includes(readMarker);
+                  if(!readObserved){protocolError='read receipt not returned';return reply(res,body,'Read failure.')}
+                  // Deliberate invalid/forbidden call, only against a harmless synthetic file.
+                  phase=2;return reply(res,body,null,{name:'edit',args:{path:sentinel,old_str:'unchanged',new_str:'changed'}});
+                }
+                if(phase===2){
+                  deniedObserved=(body.messages??[]).filter(m=>m.role==='tool').some(m=>/not (available|found|allowed|permitted)|unknown tool|denied|disabled|unrecognized|invalid tool|not registered|does not exist|error/i.test(JSON.stringify(m)));
+                  phase=3;return reply(res,body,null,{name:process.platform==='win32'?'powershell':'bash',args:{command:process.platform==='win32'?'Write-Output SYNTHETIC_SHELL_PROBE':'printf SYNTHETIC_SHELL_PROBE'}});
+                }
+                if(phase===3){
+                  shellDeniedObserved=(body.messages??[]).filter(m=>m.role==='tool').slice(-1).some(m=>/not (available|found|allowed|permitted)|unknown tool|denied|disabled|unrecognized|invalid tool|not registered|does not exist|error/i.test(JSON.stringify(m)));
+                  phase=4;return reply(res,body,'SYNTHETIC_AGENT_CANARY_FINISHED');
+                }
+                return reply(res,body,'SYNTHETIC_AGENT_CANARY_FINISHED');
+              }catch(e){protocolError=String(e);res.writeHead(500);res.end('{}')}
+            });
+          });
+          (async()=>{
+            await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});
+            const env={...process.env,COPILOT_OFFLINE:'true',COPILOT_PROVIDER_BASE_URL:'http://127.0.0.1:'+server.address().port,COPILOT_PROVIDER_TYPE:'openai',COPILOT_PROVIDER_WIRE_API:'completions',COPILOT_PROVIDER_API_KEY:'dummy-local-only',COPILOT_MODEL:model};
+            for(const k of ['GH_TOKEN','GITHUB_TOKEN','COPILOT_GITHUB_TOKEN','OPENAI_API_KEY','ANTHROPIC_API_KEY'])delete env[k];
+            const args=['-p',promptMarker+' Read sample.txt exactly once. No writing.','--agent','portfolio-verifier','--model',model,'--no-ask-user','--trust-folder','--disable-builtin-mcps','--no-auto-update','--no-color','--allow-tool=read','--available-tools=view,grep,glob'];
+            const child=process.platform==='win32'?spawn('bash',[bin,...args],{env,cwd:fixture,stdio:['ignore','pipe','pipe']}):spawn(bin,args,{env,cwd:fixture,stdio:['ignore','pipe','pipe']});
+            let stdout='',stderr='';
+            child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);
+            const timer=setTimeout(()=>child.kill(),90000);
+            const exit=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',(code,signal)=>resolve({code,signal}))});
+            clearTimeout(timer);await new Promise(resolve=>server.close(resolve));
+            console.log(JSON.stringify({exit,phase,selectedObserved,readObserved,deniedObserved,shellDeniedObserved,advertised,calls,protocolError,sentinelIntact:fs.readFileSync(sentinel,'utf8')==='unchanged\n',stdout:stdout.slice(-1000),stderr:stderr.slice(-1000)}));
+            assert.equal(exit.code,0);
+            assert.equal(protocolError,undefined);
+            assert.ok(selectedObserved,'custom agent marker absent');
+            assert.ok(readObserved,'actual read result absent');
+            assert.ok(advertised.some(x=>['view','read','read_file'].includes(x)),'no read tool');
+            assert.ok(!advertised.some(x=>/^(edit|write|create|bash|powershell|shell|execute|apply_patch|task)$/i.test(x)),'unsafe tool advertised');
+            assert.equal(fs.readFileSync(sentinel,'utf8'),'unchanged\n');
+            assert.ok(deniedObserved,'negative attempted write did not return explicit refusal');
+            assert.ok(shellDeniedObserved,'negative attempted shell did not return explicit refusal');
+            assert.ok(advertised.every(x=>['view','grep','glob'].includes(x)),'unexpected tool outside session allowlist: '+advertised.join(','));
+            console.log('STRICT_AGENT_ALLOWLIST_PASS');
+          })().catch(e=>{console.error(e);server.close();process.exitCode=1});
+          
+          MOCK
+          node "$root/mock.cjs" "$bin"
